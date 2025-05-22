@@ -3,20 +3,26 @@ FROM prefecthq/prefect:3.0.0rc14-python3.11
 # Switch to root to install system packages
 USER root
 
+# Copy requirements
 COPY requirements.txt /tmp/requirements.txt
+
+# Install system packages and Python dependencies
 RUN apt-get update && \
     apt-get -y upgrade && \
     apt-get install -y curl git openssh-client coreutils && \
     pip install --no-cache-dir -r /tmp/requirements.txt && \
-    # Also install JupyterLab
-    pip install --upgrade jupyterlab jupyterlab-git && \
+    pip install --upgrade pip && \
+    pip install streamlit pandas pyarrow s3fs && \
     rm -rf /var/lib/apt/lists/*
 
-# Set the working directory for notebooks
-WORKDIR /home/jovyan/work
+# Set working directory
+WORKDIR /app
 
-# Expose JupyterLab port
-EXPOSE 8888
+# Copy Streamlit app
+COPY ./streamlit /app
 
-# Run JupyterLab with no token and allow-root
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--NotebookApp.token=''", "--allow-root"]
+# Expose Streamlit port
+EXPOSE 8501
+
+# Run Streamlit
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
