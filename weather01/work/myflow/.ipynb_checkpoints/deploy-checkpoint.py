@@ -10,8 +10,8 @@ if __name__ == "__main__":
         source=source,
         entrypoint=entrypoint,
     ).deploy(
-        name="weather01_deployment",
+        name="weather-pollution_pipeline_deployment",
         parameters={},
         work_pool_name="default-agent-pool",
-        cron="*/15 * * * *",  # Run every 5 munites
+        cron="*/15 * * * *",  # Run every 15 munites
     )
