@@ -1,15 +1,19 @@
+# docker-compose.yml snippet
 services:
-  lakefs-dev:
-    image: treeverse/lakefs:1.7.0
+
+  jupyter:
+    build:
+      context: ./make
+      dockerfile: Dockerfile.jupyter
     ports:
-      - 8001:8000
+      - "8888:8888"
+    volumes:
+      - ./work:/home/jovyan/work:rw
+      - ./save:/home/jovyan/save
     environment:
-      LAKEFS_INSTALLATION_USER_NAME: "admin"
-      LAKEFS_INSTALLATION_ACCESS_KEY_ID: "access_key" #username
-      LAKEFS_INSTALLATION_SECRET_ACCESS_KEY: "secret_key" #password
-      LAKEFS_DATABASE_TYPE: "local"
-      LAKEFS_AUTH_ENCRYPT_SECRET_KEY: "wait"
-      LAKEFS_BLOCKSTORE_TYPE: "local"
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    # networks:
+    #   - prefect-network
 
   postgres:
     image: postgres:13-alpine
@@ -17,6 +21,8 @@ services:
       - POSTGRES_USER=prefect
       - POSTGRES_PASSWORD=prefect
       - POSTGRES_DB=prefect
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     # networks:
@@ -53,6 +59,7 @@ services:
     volumes:
       - ./make/wait-for-server.sh:/wait-for-server.sh:ro
       - ./work:/home/jovyan/work:rw
+      - ./save:/home/jovyan/save:rw
     entrypoint: ["/wait-for-server.sh"]
     # networks:
     #   - prefect-network
@@ -60,19 +67,22 @@ services:
       mode: replicated
       replicas: 2
 
-  jupyter:
-    build:
-      context: ./make
-      dockerfile: Dockerfile.jupyter
-    ports:
-      - "8888:8888"
-    volumes:
-      - ./work:/home/jovyan/work:rw
-    environment:
-      - PREFECT_API_URL=http://prefect-server:4200/api
-    # networks:
-    #   - prefect-network
 
+  lakefs-dev:
+    image: treeverse/lakefs:1.7.0
+    ports:
+      - 8000:8000
+    environment:
+      LAKEFS_INSTALLATION_USER_NAME: "admin"
+      LAKEFS_INSTALLATION_ACCESS_KEY_ID: "access_key" #username
+      LAKEFS_INSTALLATION_SECRET_ACCESS_KEY: "secret_key" #password
+      LAKEFS_DATABASE_TYPE: "local"
+      LAKEFS_AUTH_ENCRYPT_SECRET_KEY: "wait"
+      LAKEFS_BLOCKSTORE_TYPE: "local"
+
+#       LAKEFS_BLOCKSTORE_LOCAL_PATH: "/data/lakefs/data"
+#     volumes:
+#       - lakefs_data:/data/lakefs
   streamlit:
       build:
         context: .
@@ -81,6 +91,7 @@ services:
         - "8501:8501"
       volumes:
         - ./streamlit:/app
+        - ./save:/app/save 
       environment:
         - LAKEFS_ACCESS_KEY=access_key
         - LAKEFS_SECRET_KEY=secret_key
@@ -88,7 +99,9 @@ services:
       depends_on:
         - lakefs-dev
         - prefect-server
-
+        
+# volumes:
+#   lakefs_data:
 
 volumes:
   postgres_data:

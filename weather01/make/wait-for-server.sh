@@ -5,17 +5,3 @@ while ! curl -s http://prefect-server:4200/api/health > /dev/null; do
 done
 echo "Prefect Server is ready, starting Prefect Worker..."
 exec prefect worker start --pool default-agent-pool
-
-pandas==2.2.3
-pyarrow==19.0.0
-requests==2.32.3
-kedro==0.19.11
-kedro-datasets==6.0.0
-plotly==6.0.1
-matplotlib==3.10.1
-fsspec==2025.3.2
-s3fs==2025.3.2
-pytz==2024.1
-streamlit==1.45.0
-nest_asyncio==1.6.0
-geopandas==1.0.1
