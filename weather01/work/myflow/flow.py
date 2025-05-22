@@ -1,249 +1,129 @@
-import requests
 import pandas as pd
-from datetime import datetime
-import time
-import pytz
-from datetime import timedelta
-
-import nest_asyncio
-import asyncio
 import aiohttp
+import asyncio
+from datetime import datetime
+import pytz
 from prefect import flow, task
-from math import ceil
 
-from dotenv import load_dotenv
-import os
+API_KEY = "f937ef58aa2555b6d76a1119fd917eed"
+WEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
+POLLUTION_URL = "http://api.openweathermap.org/data/2.5/air_pollution"
 
-nest_asyncio.apply()
-
-load_dotenv()
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
-ACCESS_KEY = os.getenv("LAKEFS_ACCESS_KEY")
-SECRET_KEY = os.getenv("LAKEFS_SECRET_KEY")
-lakefs_endpoint = os.getenv("LAKEFS_ENDPOINT", "http://lakefs-dev:8000")
+BATCH_SIZE = 25
+WAIT_BETWEEN_BATCHES = 70  # seconds
 
 @task
-async def fetch_pollution_data(coord_df, batch_size=250):
-    POLLUTION_ENDPOINT = "http://api.openweathermap.org/data/2.5/air_pollution"
+async def fetch_weather_and_pollution(session, row):
+    lat = row["lat"]
+    lon = row["lon"]
+    district = row["district_en"]
+    province = row["province_en"]
+    district_id = row["district_id"]
 
-    async def fetch_row(session, row):
-        # await asyncio.sleep(1)  # พัก 1 วิแบบไม่บล็อก loop
-        lat = row['lat']
-        lon = row['lon']
-        province = row['province_en']
-        district = row['district_en']
-        district_id = row['district_id']
-        try:
-            params = {
-                "lat" : lat,
-                "lon" : lon,
-                "appid": API_KEY,
-                "units": "metric"
-            }
-            
-            async with session.get(POLLUTION_ENDPOINT, params=params) as response:
-                data = await response.json()
-                dt = datetime.utcnow()
-                thai_tz = pytz.timezone('Asia/Bangkok')
-                localtime = dt.astimezone(thai_tz)
-                components = data['list'][0]['components']
-                pollution_dict = {
-                    'timestamp': dt,
-                    'year': dt.year,
-                    'month': dt.month,
-                    'day': dt.day,
-                    'hour': dt.hour,
-                    'minute': dt.minute,
-                    'localtime': localtime,
-                    'province' : province,
-                    'district' : district,
-                    'district_id' : district_id,
-                    'lat' : data['coord']['lat'],
-                    'lon' : data['coord']['lon'],
-                    'main.aqi' : data['list'][0]['main']['aqi'],
-                    'components_co' : components['co'],
-                    'components_no' : components['no'],
-                    'components_no2' : components['no2'],
-                    'components_o3' : components['o3'],
-                    'components_so2' : components['so2'],
-                    'components_pm2_5' : components['pm2_5'],
-                    'components_pm10' : components['pm10'],
-                    'components_nh3' : components['nh3']
-                    }
-                return pollution_dict
+    try:
+        params = {"lat": lat, "lon": lon, "appid": API_KEY, "units": "metric"}
 
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching data: {e}")
-            return None
-        except KeyError as e:
-            print(f"Error processing data: Missing key {e}")
-            return None
-        except Exception as e:
-            print(f"Error: {e} at {province} - {district}")
+        # Weather API call
+        async with session.get(WEATHER_URL, params=params) as weather_resp:
+            weather_data = await weather_resp.json()
+
+        if weather_data.get("cod") != 200:
+            print(f"[ERROR] Missing weather data for {district}: {weather_data}")
             return None
 
-    pollution_results = []
-    total_batches = ceil(len(coord_df) / batch_size)  #sample
-    async with aiohttp.ClientSession() as session:
-        for i in range(total_batches):
-            batch = coord_df.iloc[i*batch_size:(i+1)*batch_size]
-            tasks = [fetch_row(session, row) for _, row in batch.iterrows()]
+        await asyncio.sleep(2)
+
+        # Pollution API call
+        async with session.get(POLLUTION_URL, params=params) as pollution_resp:
+            pollution_data = await pollution_resp.json()
+
+        if "list" not in pollution_data or not pollution_data["list"]:
+            print(f"[ERROR] Missing pollution data for {district}: {pollution_data}")
+            return None
+
+        await asyncio.sleep(2)
+
+        timestamp = datetime.utcnow()
+        #timestamp = datetime.now()
+        thai_tz = pytz.timezone('Asia/Bangkok')
+        localtime = timestamp.astimezone(thai_tz)
+        #created_at = dt.replace(tzinfo=thai_tz)
+
+        return {
+            "timestamp": timestamp,
+            "year": timestamp.year,
+            "month": timestamp.month,
+            "day": timestamp.day,
+            "hour": timestamp.hour,
+            "minute": timestamp.minute,
+            #"created_at": created_at,
+            "district_id": district_id,
+            "district": district,
+            "province": province,
+            "localtime": localtime,
+            "weather_main": weather_data["weather"][0]["main"],
+            "weather_description": weather_data["weather"][0]["description"],
+            "main.temp": weather_data["main"]["temp"],
+            "main.temp_min": weather_data["main"]["temp_min"],
+            "main.temp_max": weather_data["main"]["temp_max"],
+            "main.feels_like": weather_data["main"]["feels_like"],
+            "main.pressure": weather_data["main"]["pressure"],
+            "main.humidity": weather_data["main"]["humidity"],
+            "visibility": weather_data.get("visibility"),
+            "wind.speed": weather_data["wind"]["speed"],
+            "wind.deg": weather_data["wind"]["deg"],
+            "components_co": pollution_data["list"][0]["components"]["co"],
+            "components_no": pollution_data["list"][0]["components"]["no"],
+            "components_no2": pollution_data["list"][0]["components"]["no2"],
+            "components_o3": pollution_data["list"][0]["components"]["o3"],
+            "components_so2": pollution_data["list"][0]["components"]["so2"],
+            "components_pm2_5": pollution_data["list"][0]["components"]["pm2_5"],
+            "components_pm10": pollution_data["list"][0]["components"]["pm10"],
+            "components_nh3": pollution_data["list"][0]["components"]["nh3"],
+        }
+
+    except Exception as e:
+        print(f"[ERROR] Exception for {district}: {e}")
+        return None
+@flow(name="weather-flow", flow_run_name="weather-run", log_prints=True)
+async def main_flow():
+    df = pd.read_csv("/home/jovyan/work/districts.csv")
+    results = []
+
+    timeout = aiohttp.ClientTimeout(total=60)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for i in range(0, len(df), BATCH_SIZE):
+            batch = df.iloc[i:i + BATCH_SIZE]
+            tasks = [fetch_weather_and_pollution(session, row) for _, row in batch.iterrows()]
             batch_results = await asyncio.gather(*tasks)
-            pollution_results.extend([r for r in batch_results if r is not None])
+            results.extend([r for r in batch_results if r is not None])
+            if i + BATCH_SIZE < len(df):
+                print(f"Waiting {WAIT_BETWEEN_BATCHES} seconds before next batch...")
+                await asyncio.sleep(WAIT_BETWEEN_BATCHES)
 
-            print(f"✅ เสร็จ batch {i+1}/{total_batches}")
-            if i < total_batches - 1:
-                await asyncio.sleep(65)  # รอให้ผ่าน rate limit
+    df_results = pd.DataFrame(results)
+    print(df_results)
 
-    return pollution_results
-
-
-@task
-async def fetch_weather_data(coord_df, batch_size=250):  #sample
-    WEATHER_ENDPOINT = "https://api.openweathermap.org/data/2.5/weather"
-    
-    async def fetch_row(session, row):
-        # await asyncio.sleep(1)  # พัก 1 วิแบบไม่บล็อก loop
-        lat = row['lat']
-        lon = row['lon']
-        province = row['province_en']
-        district = row['district_en']
-        district_id = row['district_id']
-        try:
-            params = {
-                "lat" : lat,
-                "lon" : lon,
-                "appid": API_KEY,
-                "units": "metric"
-            }
-            async with session.get(WEATHER_ENDPOINT, params=params) as response:
-                data = await response.json()
-                dt = datetime.utcnow()
-                thai_tz = pytz.timezone('Asia/Bangkok')
-                localtime = dt.astimezone(thai_tz)
-                weather_dict = {
-                    'timestamp': dt,
-                    'year': dt.year,
-                    'month': dt.month,
-                    'day': dt.day,
-                    'hour': dt.hour,
-                    'minute': dt.minute,
-                    'localtime': localtime,
-                    'province' : province,
-                    'district' : district,
-                    'district_id' : district_id,
-                    'lat' : data['coord']['lat'],
-                    'lon' : data['coord']['lon'],
-                    'weather_main' : data["weather"][0]["main"],
-                    'weather_description' : data["weather"][0]["description"],
-                    'main.temp' : data["main"]["temp"],
-                    'main.temp_min' : data["main"]["temp_min"],
-                    'main.temp_max' : data["main"]["temp_max"],
-                    'main.feels_like' : data["main"]["feels_like"],
-                    'main.pressure' : data["main"]["pressure"],
-                    'main.humidity' : data["main"]["humidity"],
-                    'visibility' : data.get("visibility"),
-                    'wind.speed' : data["wind"]["speed"],
-                    'wind.deg' : data["wind"]["deg"]
-                    }
-                return weather_dict
-       
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching data: {e}")
-            return None
-        except KeyError as e:
-            print(f"Error processing data: Missing key {e}")
-            return None
-        except Exception as e:
-            print(f"Error: {e} at {province} - {district}")
-            return None
-
-    weather_results = []
-    total_batches = ceil(len(coord_df) / batch_size)  #sample
-    async with aiohttp.ClientSession() as session:
-        for i in range(total_batches):
-            batch = coord_df.iloc[i*batch_size:(i+1)*batch_size]
-            tasks = [fetch_row(session, row) for _, row in batch.iterrows()]
-            batch_results = await asyncio.gather(*tasks)
-            weather_results.extend([r for r in batch_results if r is not None])
-
-            print(f"✅ เสร็จ batch {i+1}/{total_batches}")
-            if i < total_batches - 1:
-                await asyncio.sleep(65)  # รอให้ผ่าน rate limit
-
-    return weather_results
-
-
-def clean_data(df, flow_timestamp):
-    df = pd.DataFrame(df)
-    
-    df['province'] = df['province'].astype("string")
-    df['district'] = df['district'].astype("string")
-    df["flow_timestamp"] = flow_timestamp
-    return df
-
-
-def save_to_lakefs_pollution(df):
-    repo = "pollution-data"
-    branch = "main"
-    path = "pollution.parquet"
-    lakefs_s3_path = f"s3a://{repo}/{branch}/{path}"
-
-    storage_options = {
-        "key": ACCESS_KEY,
-        "secret": SECRET_KEY,
-        "client_kwargs": {"endpoint_url": lakefs_endpoint}
-    }
-
-    df.to_parquet(
-        lakefs_s3_path,
-        storage_options=storage_options,
-        partition_cols=["year", "month", "day", "hour"],
-    )
-
-
-def save_to_lakefs_weather(df):
-    repo = "weather-data"
+    # lakeFS credentials from your docker-compose.yml
+    ACCESS_KEY = "access_key"
+    SECRET_KEY = "secret_key"
+    lakefs_endpoint = "http://lakefs-dev:8000/"
+    repo = "weather"
     branch = "main"
     path = "weather.parquet"
-    lakefs_s3_path = f"s3a://{repo}/{branch}/{path}"
 
+    lakefs_s3_path = f"s3a://{repo}/{branch}/{path}"
     storage_options = {
         "key": ACCESS_KEY,
         "secret": SECRET_KEY,
-        "client_kwargs": {"endpoint_url": lakefs_endpoint}
+        "client_kwargs": {
+            "endpoint_url": lakefs_endpoint
+        }
     }
 
-    df.to_parquet(
+    df_results.to_parquet(
         lakefs_s3_path,
         storage_options=storage_options,
-        partition_cols=["year", "month", "day", "hour"],
+        partition_cols=['year', 'month', 'day', 'hour'],
     )
-
-
-@flow(name="main-flow", log_prints=True)
-async def main_flow():
-    start_time = time.perf_counter()  # จับเวลา
-    flow_timestamp = datetime.utcnow()
-    
-    BASE_DIR = os.path.abspath(os.path.join(os.getcwd(), ".."))  #/home/jovyan/work
-    coord_path = os.path.join(BASE_DIR, "save", "district_coord.csv")
-    coord_df = pd.read_csv(coord_path)
-    # df_sample = coord_df.sample(10)
-    
-    pollution_results = await fetch_pollution_data(coord_df)
-    weather_results = await fetch_weather_data(coord_df)
-    
-    pollution_data = clean_data(pollution_results, flow_timestamp)
-    weather_data = clean_data(weather_results, flow_timestamp)
-
-    
-    
-    end_time = time.perf_counter()  # จับเวลาอีกครั้ง
-    print(f"\n✅ ดึงข้อมูลเสร็จทั้งหมด ใช้เวลา {end_time - start_time:.2f} วินาที")
-    
-    save_to_lakefs_pollution(pollution_data)
-    save_to_lakefs_weather(weather_data)
-    print("save to Lakefs Success")
-    # print(pollution_data.head())
-    # print(weather_data.head())
