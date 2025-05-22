@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 from prefect import flow, task
 
-API_KEY = "f937ef58aa2555b6d76a1119fd917eed"
+API_KEY = "8b9f21b3769460637f69c4fedcb8915f"
 WEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
 POLLUTION_URL = "http://api.openweathermap.org/data/2.5/air_pollution"
 
@@ -87,7 +87,7 @@ async def fetch_weather_and_pollution(session, row):
         return None
 @flow(name="weather-flow", flow_run_name="weather-run", log_prints=True)
 async def main_flow():
-    df = pd.read_csv("/home/jovyan/work/districts.csv")
+    df = pd.read_csv("/home/jovyan/save/district.csv")
     results = []
 
     timeout = aiohttp.ClientTimeout(total=60)
