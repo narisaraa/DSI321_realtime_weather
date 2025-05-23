@@ -87,7 +87,7 @@ async def fetch_weather_and_pollution(session, row):
         return None
 @flow(name="weather-flow", flow_run_name="weather-run", log_prints=True)
 async def main_flow():
-    df = pd.read_csv("/home/jovyan/save/district.csv")
+    df = pd.read_csv("/home/jovyan/work/district.csv")
     results = []
 
     timeout = aiohttp.ClientTimeout(total=60)

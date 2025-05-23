@@ -62,7 +62,7 @@ def load_gdf(geojson_path):
 ####_______________________________________
 
 # อ่านไฟล์ pollution
-pollution_path = 'pollution-data/main/pollution.parquet'
+pollution_path = 'weather/main/weather.parquet'
 pollution_df = load_data(pollution_path)
 pollution_df = pollution_df.rename(columns={"components_pm2_5": "pm25"})
 
