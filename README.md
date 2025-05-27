@@ -176,7 +176,5 @@ wait untill flow finish for first time then check you data on LakeFS.
 10.**Open Streamlit to see dashboard (port:8501):**
 
 ## แผนที่ระดับจังหวัด
-![Province level map](Provincial_level.png)
-
-## แผนที่ระดับอำเภอ
-![District level map](District_level.png)
+![choropleth_map](picture1.png)
+![choropleth_map](picture1.png)
