@@ -1,10 +1,7 @@
 FROM prefecthq/prefect:3.0.0rc14-python3.11
 
-# Install system packages and Python dependencies
 COPY requirements.txt /tmp/requirements.txt
-
 RUN apt-get update && \
-    apt-get install -y curl git openssh-client coreutils && \
-    pip install --upgrade pip && \
+    apt-get install -y curl && \
     pip install --no-cache-dir -r /tmp/requirements.txt && \
     rm -rf /var/lib/apt/lists/*
