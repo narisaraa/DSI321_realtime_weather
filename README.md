@@ -127,27 +127,51 @@
 
 ---
 
-##  วิธีการเริ่มต้นใช้งาน
+##  Start the project
 
-1. **ติดตั้ง Docker และ Docker Compose** บนเครื่องของคุณ  
+1. **Install Docker on your device.** 
    หากยังไม่มี สามารถดูวิธีติดตั้งได้จาก [Docker Docs](https://docs.docker.com/get-docker/)
 
-2. **โคลนโปรเจกต์นี้:**
+2. **Clone this Repository:**
    ```bash
    git clone https://github.com/narisaraa/dsi321_2025.git
 
-3. **เข้าไปในโฟลเดอร์โปรเจกต์:**
+3. **then go into folder dsi321_2025 where docker-compose.yml exist.**
    ```bash
    cd dsi321_2025
 
-4. **รันระบบด้วย Docker Compose:**
    ```bash
-   docker-compose up
+   .
+    ├── dsi321_2025
+    │   ├── docker-compose.yml
+
+
+4. **Run Docker:**
+   ```bash
+   docker compose up --build -d
 
 5. **ติดตั้ง dependencies (หากไม่ใช้ Docker):**
    ```bash
    pip install -r requirements.txt
 
-6. **รันแอปพลิเคชัน (เช่นแดชบอร์ด Streamlit):**
+6. **Create file .env:**
+   ```bash
+   OPENWEATHER_API_KEY=YOUR_API_KEY
+
+    LAKEFS_ACCESS_KEY=access_key
+    LAKEFS_SECRET_KEY=secret_key
+    LAKEFS_ENDPOINT=http://lakefs-dev:8000/
+
+7. **Create repositories on LakeFS (port:8000):**
    ```bash
    streamlit run app.py
+
+8. **Deploy flow on jupyter terminal (port:8888):**
+   ```bash
+   python deploy.py
+
+9. **Check flow on Prefect-server (port:4200):**
+On Deployment menu should show main-flow schedule.
+wait untill flow finish for first time then check you data on LakeFS.
+
+10.**Open Streamlit to see dashboard (port:8501)**
