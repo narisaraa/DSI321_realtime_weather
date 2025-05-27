@@ -1,4 +1,6 @@
 import streamlit as st
+import pyarrow as pa
+
 
 import pandas as pd
 from datetime import datetime, timedelta
@@ -12,10 +14,9 @@ import plotly.express as px
 import geopandas as gpd
 
 
-load_dotenv()
-ACCESS_KEY = os.getenv("LAKEFS_ACCESS_KEY")
-SECRET_KEY = os.getenv("LAKEFS_SECRET_KEY")
-lakefs_endpoint = os.getenv("LAKEFS_ENDPOINT", "http://lakefs-dev:8000")
+ACCESS_KEY = "access_key"
+SECRET_KEY = "secret_key"
+lakefs_endpoint = "http://lakefs-dev:8000/"
 
 fs = s3fs.S3FileSystem(
     key=ACCESS_KEY,
@@ -30,26 +31,38 @@ BASE_DIR = os.getcwd()
 # โหลด Data
 @st.cache_data(ttl=300)
 def load_data(lakefs_path):
+    schema = pa.schema([
+        ("timestamp", pa.timestamp("ns")),
+        ("localtime", pa.timestamp("ns")),
+        ("minute", pa.int64()),
+        ("district_id", pa.string()),  # เผื่อไว้
+        ("components_pm2_5", pa.float64())
+    ])
 
     dataset = ds.dataset(
         lakefs_path,
         format="parquet",
         partitioning="hive",
-        filesystem=fs
+        filesystem=fs,
+        schema=schema
     )
     table = dataset.to_table()
     df = table.to_pandas()
 
-    # รวม column ปีเดือนวันเป็น timestamp (ถ้ายังไม่มี timestamp อยู่)
-    # if "timestamp" not in df.columns and all(col in df.columns for col in ["year", "month", "day", "hour"]):
-    #     df["timestamp"] = pd.to_datetime(df[["year", "month", "day", "hour"]])
+    # ✅ กรองเฉพาะข้อมูลที่มี district_id และอยู่หลังวันที่ 2025-05-18
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df = df[df["timestamp"] >= pd.Timestamp("2025-05-18")]
 
-    # กรองแค่ 3 วันล่าสุด
-    max_time = df["timestamp"].max()
-    start_time = max_time - pd.Timedelta(days=1)
-    df_recent = df[df["timestamp"] >= start_time]
+    # กรองข้อมูลที่มี district_id ไม่เป็น null
+    df = df[df["district_id"].notnull()]
+    df["district_id"] = df["district_id"].astype(str)
 
-    return df_recent
+    df["pm25"] = pd.to_numeric(df["components_pm2_5"], errors="coerce")
+
+    return df
+
+
+
     
     # return df
 
@@ -66,13 +79,15 @@ pollution_path = 'weather/main/weather.parquet'
 pollution_df = load_data(pollution_path)
 pollution_df = pollution_df.rename(columns={"components_pm2_5": "pm25"})
 
-coord_path = os.path.join(BASE_DIR, "save", "district_coord.csv")
+
+coord_path = "districts.csv"
 df_code = pd.read_csv(coord_path)
-# df_code = df_code.rename(columns={"district_en":"district", "province_en":"province"})
 
-# st.write(pollution_df)
+# 🔧 ทำให้ทั้ง pollution_df และ df_code ใช้ district_id เป็น string
+pollution_df["district_id"] = pollution_df["district_id"].astype(str)
+df_code["district_id"] = df_code["district_id"].astype(str)
 
-# merge province_id
+# 🔁 merge หลังจากแปลง datatype แล้ว
 pollution_df = pd.merge(
     pollution_df,
     df_code[["province_th", "district_th", "province_id", "district_id"]],
@@ -80,12 +95,13 @@ pollution_df = pd.merge(
     how="left"
 )
 
+
 # โหลดไฟล์ geojson
 
-province_geojson_path = os.path.join(BASE_DIR, "save", "gadm41_THA_1_clean.geojson")
+province_geojson_path = os.path.join(BASE_DIR, "gadm41_THA_1_clean.geojson")
 province_gdf = load_gdf(province_geojson_path)
 
-district_geojson_path = os.path.join(BASE_DIR, "save", "gadm41_THA_2_clean.geojson")
+district_geojson_path = os.path.join(BASE_DIR, "gadm41_THA_2_clean.geojson")
 district_gdf = load_gdf(district_geojson_path)
 
 
@@ -96,21 +112,7 @@ st.title("แผนที่ค่าฝุ่น PM2.5 รายอำเภอ
 
 #__________ AQI __________________
 
-def get_aqi_level(pm25):
-    if 0 < pm25 <= 12:
-        return "Good"
-    elif 12 < pm25 <= 35.4:
-        return "Moderate"
-    elif 35.4 < pm25 <= 55.4:
-        return "Unhealthy for Sensitive Groups"
-    elif 55.4 < pm25 <= 150.4:
-        return "Unhealthy"
-    elif 150.4 < pm25 <= 250.4:
-        return "Very Unhealthy"
-    elif 250.4 < pm25 <= 350.4:
-        return "Hazardous"
-    elif 350.4 < pm25 <= 500.4:
-        return "Very Hazardous"
+
 
 # pollution_df["aqi_level"] = pollution_df["pm25"].apply(get_aqi_level)
 
@@ -179,21 +181,50 @@ level = st.radio(
 
 #________ MAP ______________
 
+#________ MAP ______________
+
+#________ MAP ______________
+
+#________ MAP ______________
+
+#________ MAP ______________
+
+#________ MAP ______________
+
+#________ MAP ______________
+
+# ✅ วิธีแก้ทีเดียวจบ (เฉพาะส่วน if level == ...)
+
 if level == "จังหวัด (Province)":
-    map_df = (df_window
-    .groupby(["local_timestamp_15min", "province_id", "province_th"], as_index=False)
-    .agg(pm25=("pm25", "mean"))
-)
-    map_df["aqi_level"] = map_df["pm25"].apply(get_aqi_level)
+    grouped = df_window.groupby(["local_timestamp_15min", "province_id", "province_th"])
+    map_df = grouped["pm25"].mean().reset_index()
+
+    # ✅ ลบคอลัมน์ซ้ำและ NaN อย่างปลอดภัย
+    map_df = map_df.loc[:, ~map_df.columns.duplicated()].copy()
+    map_df.reset_index(drop=True, inplace=True)
+    map_df = map_df[map_df["pm25"].notnull()]
+
+    # ✅ แปลงค่า pm25 เป็นระดับ AQI
+    bins = [0, 12, 35.4, 55.4, 150.4, 250.4, 350.4, 500.4]
+    labels = [
+        "Good", "Moderate", "Unhealthy for Sensitive Groups",
+        "Unhealthy", "Very Unhealthy", "Hazardous", "Very Hazardous"
+    ]
+    map_df["aqi_level"] = pd.cut(
+        map_df["pm25"],
+        bins=bins,
+        labels=labels,
+        include_lowest=True
+    )
 
     geojson = province_gdf
     locations = "province_id"
-    featureidkey = "properties.CC_1"  # ตรวจสอบว่า GeoJSON มี CC_1
+    featureidkey = "properties.CC_1"
 
     hover_name = "province_th"
-    hover_data={
+    hover_data = {
         "province_th": False,
-        "pm25": ':.2f' ,
+        "pm25": ':.2f',
         "province_id": False,
         "local_timestamp_15min": False
     }
@@ -201,27 +232,39 @@ if level == "จังหวัด (Province)":
         "<b>จังหวัด : </b> %{customdata[0]}<br>"
         "<b>PM2.5 : </b> %{customdata[1]:.2f}<extra></extra>"
     )
-    customdata = map_df[["province_th", "pm25"]].values
+    customdata = map_df[["province_th", "pm25"]].to_numpy()
 
 elif level == "อำเภอ (District)":
-#     map_df = (df_window
-#     .groupby(["local_timestamp_15min", "district_id", "province_th", "district_th"], as_index=False)
-#     .agg(pm25=("pm25", "mean"))
-# )
-
     map_df = (
-    df_window
-    .sort_values("timestamp")
-    .drop_duplicates(["local_timestamp_15min", "district_id"])
-)
-    map_df["aqi_level"] = map_df["pm25"].apply(get_aqi_level)
+        df_window
+        .sort_values("timestamp")
+        .drop_duplicates(["local_timestamp_15min", "district_id"])
+    )
+
+    # ✅ ลบคอลัมน์ซ้ำและ NaN อย่างปลอดภัย
+    map_df = map_df.loc[:, ~map_df.columns.duplicated()].copy()
+    map_df.reset_index(drop=True, inplace=True)
+    map_df = map_df[map_df["pm25"].notnull()]
+
+    # ✅ แปลงค่า pm25 เป็นระดับ AQI
+    bins = [0, 12, 35.4, 55.4, 150.4, 250.4, 350.4, 500.4]
+    labels = [
+        "Good", "Moderate", "Unhealthy for Sensitive Groups",
+        "Unhealthy", "Very Unhealthy", "Hazardous", "Very Hazardous"
+    ]
+    map_df["aqi_level"] = pd.cut(
+        map_df["pm25"],
+        bins=bins,
+        labels=labels,
+        include_lowest=True
+    )
 
     geojson = district_gdf
     locations = "district_id"
-    featureidkey = "properties.CC_2"  # ตรวจสอบว่า GeoJSON มี CC_2
+    featureidkey = "properties.CC_2"
 
     hover_name = "district_th"
-    hover_data={
+    hover_data = {
         "province_th": True,
         "pm25": ':.2f',
         "district_id": False,
@@ -232,8 +275,9 @@ elif level == "อำเภอ (District)":
         "<b>อำเภอ :</b> %{customdata[1]}<br>"
         "<b>PM2.5 :</b> %{customdata[2]:.2f}<extra></extra>"
     )
-    customdata = map_df[["province_th", "district_th", "pm25"]].values
-    
+    customdata = map_df[["province_th", "district_th", "pm25"]].to_numpy()
+
+
 
 # plot
 fig = px.choropleth_mapbox(
@@ -272,3 +316,4 @@ st.plotly_chart(fig, use_container_width=True)
 # date
 # backgroud
 # UI
+###

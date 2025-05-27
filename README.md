@@ -1,5 +1,5 @@
 # Real-Time PM 2.5 Monitoring  Dashboard
-โดย นางสาว นริศรา กรวิรัตน์ เลขทะเบียนนักศึกษา 6524651012
+โดย นางสาว นริศรา กรวิรัตน์ เลขทะเบียนนักศึกษา 6524651012 Project Proposal: Real-Time Weather Data Pipeline with Visualization
 
 
 ## 1. ความเป็นมา ##
