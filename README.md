@@ -175,7 +175,7 @@ wait untill flow finish for first time then check you data on LakeFS.
 
 10.**Open Streamlit to see dashboard (port:8501):**
 
-## แผนที่ระดับจังหวัด
+## Real-Time PM 2.5 Dashboard
 ![รูปที่ 1](picture1.png)
 
 ![รูปที่ 2](picture.png)
