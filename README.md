@@ -179,4 +179,4 @@ wait untill flow finish for first time then check you data on LakeFS.
 ![Province level map](Provincial_level.png)
 
 ## แผนที่ระดับอำเภอ
-![District level map](District%20level.png)
+![District level map](District_level.png)
