@@ -141,7 +141,6 @@
    cd dsi321_2025
 
 
-   .
     ├── dsi321_2025
     │   ├── docker-compose.yml
 
