@@ -161,15 +161,15 @@
     LAKEFS_SECRET_KEY=secret_key
     LAKEFS_ENDPOINT=http://lakefs-dev:8000/
 
-7. **Create repositories on LakeFS (port:8000):**
+7. **Create repositories on LakeFS :**
    ```bash
    streamlit run app.py
 
-8. **Deploy flow on jupyter terminal (port:8888):**
+8. **Deploy flow on jupyter terminal :**
    ```bash
    python deploy.py
 
-9. **Check flow on Prefect-server (port:4200):**
+9. **Check flow on Prefect-server :**
 On Deployment menu should show main-flow schedule.
 wait untill flow finish for first time then check you data on LakeFS.
 
